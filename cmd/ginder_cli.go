@@ -7,7 +7,7 @@ import (
 	"github.com/ergagnon/gocmder"
 )
 
-func main2() {
+func main() {
 	cli, err := gocmder.NewCmder(internal.AppConfig{}, func(cfg any) {
 			app := internal.NewApp(cfg.(internal.AppConfig))
 			app.Run()

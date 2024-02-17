@@ -34,27 +34,27 @@
      "sync"
      "sync/atomic"
      "time"
- 
+
      "github.com/flier/gohs/hyperscan"
  )
- 
+
  var (
      flagNoColor    = flag.Bool("C", false, "Disable colorized output.")
      flagByteOffset = flag.Bool("b", false, "The offset in bytes of a matched pattern is displayed in front of the respective matched line")
  )
- 
+
  var theme = func(s string) string { return s }
- 
+
  func highlight(s string) string {
      return "\033[35m" + s + "\033[0m"
  }
- 
+
  type context struct {
      *bytes.Buffer
      filename string
      data     []byte
  }
- 
+
  /**
   * This is the function that will be called for each match that occurs. @a ctx
   * is to allow you to have some application-specific state that you will get
@@ -63,48 +63,48 @@
   */
  func eventHandler(id uint, from, to uint64, flags uint, data interface{}) error {
      ctx, _ := data.(context)
- 
+
      start := bytes.LastIndexByte(ctx.data[:from], '\n')
      end := int(to) + bytes.IndexByte(ctx.data[to:], '\n')
- 
+
      if start == -1 {
          start = 0
      } else {
          start++
      }
- 
+
      if end == -1 {
          end = len(ctx.data)
      }
- 
+
      fmt.Fprintf(ctx, "%s", ctx.filename)
      if *flagByteOffset {
          fmt.Fprintf(ctx, ":%d", start)
      }
      fmt.Fprintf(ctx, "\t%s%s%s\n", ctx.data[start:from], theme(string(ctx.data[from:to])), ctx.data[to:end])
- 
+
      return nil
  }
- 
- func main() {
+
+ func main2() {
      flag.Parse()
- 
+
      if flag.NArg() < 2 {
          _, prog := filepath.Split(os.Args[0])
          fmt.Fprintf(os.Stderr, "Usage: %s <pattern> <input file>\n", prog)
          os.Exit(-1)
      }
- 
+
      if !*flagNoColor {
          stat, _ := os.Stdout.Stat()
- 
+
          if stat != nil && stat.Mode()&os.ModeType != 0 {
              theme = highlight
          }
      }
- 
+
      pattern := hyperscan.NewPattern(flag.Arg(0), hyperscan.DotAll)
- 
+
      /* First, we attempt to compile the pattern provided on the command line.
       * We assume 'DOTALL' semantics, meaning that the '.' meta-character will
       * match newline characters. The compiler will analyse the given pattern and
@@ -116,9 +116,9 @@
          fmt.Fprintf(os.Stderr, "ERROR: Unable to compile pattern \"%s\": %s\n", pattern.String(), err.Error())
          os.Exit(-1)
      }
- 
+
      defer database.Close()
- 
+
      scratchPool := sync.Pool{
          New: func() interface{} {
              scratch, err := hyperscan.NewManagedScratch(database)
@@ -133,36 +133,36 @@
          scratch, _ := scratchPool.Get().(*hyperscan.Scratch)
          return scratch, func() { scratchPool.Put(scratch) }
      }
- 
+
      start := time.Now()
      var files, size uint32
      var wg sync.WaitGroup
- 
+
      for _, pattern := range os.Args[1:] {
          filenames, err := filepath.Glob(pattern)
          if err != nil {
              fmt.Fprint(os.Stderr, "ERROR: Unable to list all files matching pattern. Exiting.\n")
              os.Exit(-1)
          }
- 
+
          for _, filename := range filenames {
              filename := filename
- 
+
              wg.Add(1)
- 
+
              go func() {
                  scratch, release := scratchAlloc()
                  defer release()
- 
+
                  /* Next, we read the input data file into a buffer. */
                  inputData, err := os.ReadFile(filename)
                  if err != nil {
                      os.Exit(-1)
                  }
- 
+
                  atomic.AddUint32(&files, 1)
                  atomic.AddUint32(&size, uint32(len(inputData)))
- 
+
                  /* Finally, we issue a call to hs_scan, which will search the input buffer
                   * for the pattern represented in the bytecode. Note that in order to do
                   * this, scratch space needs to be allocated with the hs_alloc_scratch
@@ -179,26 +179,26 @@
                   * that the callback is able to print out the pattern that matched on each
                   * match event.
                   */
- 
+
                  buf := new(bytes.Buffer)
                  if err := database.Scan(inputData, scratch, eventHandler, context{buf, filename, inputData}); err != nil {
                      fmt.Fprint(os.Stderr, "ERROR: Unable to scan input buffer. Exiting.\n")
                      os.Exit(-1)
                  }
                  fmt.Fprint(os.Stdout, buf.String())
- 
+
                  wg.Done()
              }()
          }
      }
- 
+
      wg.Wait()
- 
+
      /* Scanning is complete, any matches have been handled, so now we just
       * clean up and exit.
       */
- 
+
      fmt.Printf("Scanning %d bytes in %d files with Hyperscan in %s\n", size, files, time.Since(start))
- 
+
      return
  }
