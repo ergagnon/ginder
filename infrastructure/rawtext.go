@@ -40,7 +40,7 @@ func (me *rawTextService) Extract(reader io.Reader) io.Reader {
 	stream, err := me.client.Extract(ctx)
 
     if err != nil {
-		log.Fatalf("client.Extract failed: %v", err)
+		log.Fatalf("client.RawTextExtract failed: %v", err)
 	}
 
     pr, pw := io.Pipe()
@@ -49,16 +49,15 @@ func (me *rawTextService) Extract(reader io.Reader) io.Reader {
 		for {
 			in, err := stream.Recv()
 			if err == io.EOF {
-				log.Println("End receive content")
                 pw.Close()
 				return
 			}
 			if err != nil {
-				log.Fatalf("client.RouteChat failed: %v", err)
+				log.Fatalf("client.RawTextExtract failed: %v", err)
 			}
 
             pw.Write(in.Content)
-			log.Println("Got content")
+			log.Println("Extract content from: ", in.Type)
 		}
 	}()
 
@@ -68,7 +67,6 @@ func (me *rawTextService) Extract(reader io.Reader) io.Reader {
             n, err := reader.Read(buf)
 
             if err == io.EOF {
-                log.Println("End read file input")
                 stream.CloseSend()
                 break
             }

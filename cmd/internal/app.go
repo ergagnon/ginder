@@ -3,8 +3,10 @@ package internal
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -22,43 +24,85 @@ func NewApp(cfg AppConfig) *app {
 }
 
 func (a *app) Run() {
-    var wg sync.WaitGroup
+	start := time.Now()
 
-    start := time.Now()
-	fmt.Printf(a.Config.Message)
+	fmt.Printf(a.Config.Directory)
 
-    service := infrastructure.NewRawTextService()
-    defer service.Close()
+	service := infrastructure.NewRawTextService()
+	defer service.Close()
 
-    filePath := "C:\\Users\\egagn\\OneDrive\\Documents\\Inspiration.docx"
+	extractPool := sync.Pool{
+		New: func() any {
+			return &extract{service: service}
+		},
+	}
 
-    file, err := os.Open(filePath)
-    if err != nil {
-        log.Fatalf("error open file %s", filePath)
-        return
-    }
-    defer file.Close()
+	var wg sync.WaitGroup
 
-    reader := service.Extract(file)
+	err := filepath.Walk(a.Config.Directory, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
+			return err
+		}
 
-    buf := make([]byte, 1024)
+		if info.IsDir() {
+			return nil
+		}
 
-    wg.Add(1)
-    go func() {
-        for {
-            n, err := reader.Read(buf)
+		extract := extractPool.Get().(*extract)
 
-            if err == io.EOF {
-                wg.Done()
-                break
-            }
+		wg.Add(1)
+		go func() {
+			extract.Extract(path)
+			wg.Done()
+		}()
 
-            log.Println(n, err, string(buf[:n]))
-        }
-    }()
+		return nil
+	})
 
-    wg.Wait()
+	if err != nil {
+		fmt.Printf("Error walking directory %q: %v\n", a.Config.Directory, err)
+	}
 
-    elapsed := time.Since(start)
-    log.Printf("Extract took %s", elapsed)
+	wg.Wait()
+
+	elapsed := time.Since(start)
+	log.Printf("Extract took %s", elapsed)
+}
+
+type extract struct {
+	service infrastructure.RawTextService
+}
+
+func (me *extract) Extract(filePath string) {
+	var wg sync.WaitGroup
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Fatalf("error open file %s", filePath)
+		return
+	}
+	defer file.Close()
+
+	log.Println("Extracting file: ", filePath)
+
+	reader := me.service.Extract(file)
+
+	buf := make([]byte, 1024)
+
+	wg.Add(1)
+	go func() {
+		for {
+			_, err := reader.Read(buf)
+
+			if err == io.EOF {
+				wg.Done()
+				break
+			}
+
+			//log.Println(n, err, string(buf[:n]))
+		}
+	}()
+
+	wg.Wait()
 }
