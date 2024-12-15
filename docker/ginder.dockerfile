@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY cmd/ ./cmd
 
-RUN CGO_ENABLED=1 GOOS=linux go build -x -o /ginder cmd/hs_cmd.go
+RUN CGO_ENABLED=1 GOOS=linux go build -x -o /ginder cmd/hsgo/hs_cmd.go
 #cmd/ginder_cli.go
 
 FROM ubuntu:latest
