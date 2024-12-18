@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/ergagnon/ginder/cmd/internal"
+	"github.com/ergagnon/ginder/cmd/ginder/internal"
 	"github.com/ergagnon/gocmder"
 )
 
