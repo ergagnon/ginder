@@ -22,7 +22,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/hs_cmd.go",
       "env": {
-       // "PKG_CONFIG_PATH": "C:\\Dev\\vcpkg\\packages\\hyperscan_x64-windows"
+        // "PKG_CONFIG_PATH": "C:\\Dev\\vcpkg\\packages\\hyperscan_x64-windows"
       }
     }
   ]

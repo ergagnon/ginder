@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,10 @@ func (a *app) Run() {
 			return nil
 		}
 
+		if strings.Contains(path, ".ini") {
+			return nil
+		}
+
 		extract := extractPool.Get().(*extract)
 
 		wg.Add(1)
@@ -75,7 +80,7 @@ type extract struct {
 }
 
 func (me *extract) Extract(filePath string) {
-	var wg sync.WaitGroup
+	log.SetOutput(os.Stdout)
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -88,21 +93,42 @@ func (me *extract) Extract(filePath string) {
 
 	reader := me.service.Extract(file)
 
-	buf := make([]byte, 1024)
+    // Create a pipe for async processing
+	pr, pw := io.Pipe()
 
+	var wg sync.WaitGroup
+
+	// Goroutine to copy from original reader to pipe writer
 	wg.Add(1)
 	go func() {
-		for {
-			_, err := reader.Read(buf)
+		defer wg.Done()
+		defer pw.Close()
 
-			if err == io.EOF {
-				wg.Done()
-				break
-			}
+		_, err := io.Copy(pw, reader)
+		if err != nil {
+			log.Printf("error reading data: %v", err)
+			pw.CloseWithError(err)
+		}
+	}()
 
-			//log.Println(n, err, string(buf[:n]))
+    // Goroutine to copy from pipe reader to file
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		outputFile, err := os.Create(filePath + ".extracted")
+		if err != nil {
+			log.Printf("error creating output file: %v", err)
+			return
+		}
+		defer outputFile.Close()
+
+		_, err = io.Copy(outputFile, pr)
+		if err != nil {
+			log.Printf("error writing to file: %v", err)
 		}
 	}()
 
 	wg.Wait()
+	log.Println("Extraction completed successfully")
 }
